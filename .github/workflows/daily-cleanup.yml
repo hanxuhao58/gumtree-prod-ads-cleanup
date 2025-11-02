@@ -72,7 +72,8 @@ jobs:
             echo "LOG_FILE=$LOG_FILE" >> $GITHUB_OUTPUT
             
             # 提取统计信息（只从账号处理完成的摘要中提取）
-            TOTAL_ACCOUNTS=$(grep -c "账号.*处理完成" "$LOG_FILE" || echo "0")
+            # 只统计带 ✅ 标记的账号处理完成行
+            TOTAL_ACCOUNTS=$(grep -c "✅ 账号.*处理完成" "$LOG_FILE" || echo "0")
             TOTAL_ACTIVE=$(grep "📊 发现活跃广告:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
             TOTAL_INACTIVE=$(grep "💤 非活跃广告:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
             TOTAL_DELETED=$(grep "🗑️  成功删除:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
@@ -82,29 +83,232 @@ jobs:
             echo "TOTAL_INACTIVE=$TOTAL_INACTIVE" >> $GITHUB_OUTPUT
             echo "TOTAL_DELETED=$TOTAL_DELETED" >> $GITHUB_OUTPUT
             
-            # 生成详细报告
-            {
-              echo "Gumtree 广告清理日报"
-              echo "=================="
-              echo ""
-              echo "执行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
-              echo "环境: 生产环境 (mobile-apps-bff.gumtree.com)"
-              echo ""
-              echo "总体统计"
-              echo "--------"
-              echo "处理账号数: $TOTAL_ACCOUNTS"
-              echo "活跃广告: $TOTAL_ACTIVE 个"
-              echo "非活跃广告: $TOTAL_INACTIVE 个"
-              echo "总计: $((TOTAL_ACTIVE + TOTAL_INACTIVE)) 个"
-              echo "成功删除: $TOTAL_DELETED 个"
-              echo ""
-              echo "逐账号详情"
-              echo "----------"
-              grep -A 5 "账号.*处理完成" "$LOG_FILE" | grep -E "账号|活跃广告|非活跃广告|合计|成功删除" || true
-            } > report_summary.txt
+            # 生成日期和环境信息
+            REPORT_DATE=$(date '+%Y年%m月%d日')
+            REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S %Z')
+            RUN_ENV="${{ github.event.inputs.environment || 'prod' }}"
             
-            echo "✅ 报告生成完成"
-            cat report_summary.txt
+            # 生成 HTML 报告
+            cat > report_summary.html << 'HTML_EOF'
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gumtree 广告清理日报</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #2d3748;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .meta {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+        .meta p {
+            margin: 5px 0;
+            color: #4a5568;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 0;
+        }
+        .accounts {
+            margin-top: 30px;
+        }
+        .account-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .account-card h3 {
+            color: #2d3748;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+        }
+        .account-card h3::before {
+            content: "✅";
+            margin-right: 10px;
+        }
+        .account-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .account-stat {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #667eea;
+        }
+        .account-stat label {
+            display: block;
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        .account-stat value {
+            display: block;
+            font-size: 18px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-prod {
+            background: #f56565;
+            color: white;
+        }
+        .badge-bixi {
+            background: #48bb78;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Gumtree 广告清理日报</h1>
+        
+        <div class="meta">
+            <p><strong>执行时间：</strong>REPORT_TIME_PLACEHOLDER</p>
+            <p><strong>运行环境：</strong>RUN_ENV_PLACEHOLDER <span class="badge badge-RUN_ENV_CLASS_PLACEHOLDER">RUN_ENV_NAME_PLACEHOLDER</span></p>
+            <p><strong>触发方式：</strong>TRIGGER_TYPE_PLACEHOLDER</p>
+        </div>
+        
+        <h2>📈 总体统计</h2>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>处理账号数</h3>
+                <p class="number">TOTAL_ACCOUNTS_PLACEHOLDER</p>
+            </div>
+            <div class="stat-card">
+                <h3>活跃广告</h3>
+                <p class="number">TOTAL_ACTIVE_PLACEHOLDER</p>
+            </div>
+            <div class="stat-card">
+                <h3>非活跃广告</h3>
+                <p class="number">TOTAL_INACTIVE_PLACEHOLDER</p>
+            </div>
+            <div class="stat-card">
+                <h3>成功删除</h3>
+                <p class="number">TOTAL_DELETED_PLACEHOLDER</p>
+            </div>
+        </div>
+        
+        <h2>👥 逐账号详情</h2>
+        <div class="accounts">
+ACCOUNTS_DETAILS_PLACEHOLDER
+        </div>
+        
+        <div class="footer">
+            <p>此报告由 GitHub Actions 自动生成</p>
+            <p>查看完整日志: <a href="GITHUB_RUN_URL_PLACEHOLDER">GitHub Actions</a></p>
+        </div>
+    </div>
+</body>
+</html>
+HTML_EOF
+
+            # 替换占位符
+            sed -i "s|REPORT_TIME_PLACEHOLDER|$REPORT_TIME|g" report_summary.html
+            sed -i "s|RUN_ENV_PLACEHOLDER|$RUN_ENV|g" report_summary.html
+            
+            if [ "$RUN_ENV" = "prod" ]; then
+              sed -i "s|RUN_ENV_CLASS_PLACEHOLDER|prod|g" report_summary.html
+              sed -i "s|RUN_ENV_NAME_PLACEHOLDER|生产环境|g" report_summary.html
+            else
+              sed -i "s|RUN_ENV_CLASS_PLACEHOLDER|bixi|g" report_summary.html
+              sed -i "s|RUN_ENV_NAME_PLACEHOLDER|测试环境|g" report_summary.html
+            fi
+            
+            TRIGGER_TYPE="${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}"
+            sed -i "s|TRIGGER_TYPE_PLACEHOLDER|$TRIGGER_TYPE|g" report_summary.html
+            sed -i "s|TOTAL_ACCOUNTS_PLACEHOLDER|$TOTAL_ACCOUNTS|g" report_summary.html
+            sed -i "s|TOTAL_ACTIVE_PLACEHOLDER|$TOTAL_ACTIVE|g" report_summary.html
+            sed -i "s|TOTAL_INACTIVE_PLACEHOLDER|$TOTAL_INACTIVE|g" report_summary.html
+            sed -i "s|TOTAL_DELETED_PLACEHOLDER|$TOTAL_DELETED|g" report_summary.html
+            sed -i "s|GITHUB_RUN_URL_PLACEHOLDER|${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|g" report_summary.html
+            
+            # 提取账号详情并生成 HTML
+            ACCOUNTS_HTML=""
+            grep -A 4 "✅ 账号.*处理完成" "$LOG_FILE" | while IFS= read -r line; do
+              if echo "$line" | grep -q "✅ 账号"; then
+                ACCOUNT_NAME=$(echo "$line" | sed 's/.*✅ 账号 \(.*\) 处理完成.*/\1/')
+                echo "<div class=\"account-card\"><h3>$ACCOUNT_NAME</h3><div class=\"account-stats\">"
+              elif echo "$line" | grep -q "📊 发现活跃广告"; then
+                ACTIVE=$(echo "$line" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+")
+                echo "<div class=\"account-stat\"><label>活跃广告</label><value>$ACTIVE 个</value></div>"
+              elif echo "$line" | grep -q "💤 非活跃广告"; then
+                INACTIVE=$(echo "$line" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+")
+                echo "<div class=\"account-stat\"><label>非活跃广告</label><value>$INACTIVE 个</value></div>"
+              elif echo "$line" | grep -q "🗑️  成功删除"; then
+                DELETED=$(echo "$line" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+")
+                echo "<div class=\"account-stat\"><label>成功删除</label><value>$DELETED 个</value></div></div></div>"
+              fi
+            done > accounts_temp.html
+            
+            sed -i "/ACCOUNTS_DETAILS_PLACEHOLDER/r accounts_temp.html" report_summary.html
+            sed -i "/ACCOUNTS_DETAILS_PLACEHOLDER/d" report_summary.html
+            
+            echo "✅ HTML 报告生成完成"
+            ls -lh report_summary.html
           else
             echo "❌ 未找到日志文件"
             echo "TOTAL_ACCOUNTS=0" >> $GITHUB_OUTPUT
@@ -121,7 +325,7 @@ jobs:
           path: |
             logs/*.log
             reports/*.jtl
-            report_summary.txt
+            report_summary.html
           retention-days: 30
 
       - name: 发送邮件报告
@@ -132,7 +336,7 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Gumtree 广告清理日报 - ${{ github.run_number }} [${{ github.event.inputs.environment || 'prod' }}]"
+          subject: "Gumtree 广告清理日报 - $(date '+%Y年%m月%d日') [${{ github.event.inputs.environment || 'prod' }}]"
           to: hanxuhao@58.com
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
@@ -157,7 +361,9 @@ jobs:
             
             ---
             此邮件由 GitHub Actions 自动发送
-          attachments: report_summary.txt
+          attachments: report_summary.html
+          html_body: report_summary.html
+          convert_markdown: false
           priority: normal
 
       - name: 通知执行结果
