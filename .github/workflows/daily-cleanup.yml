@@ -86,9 +86,11 @@ jobs:
             # 生成日期和环境信息
             REPORT_DATE=$(date '+%Y年%m月%d日')
             REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S %Z')
+            REPORT_DATETIME=$(date '+%Y年%m月%d日 %H:%M:%S')
             
-            # 输出日期供邮件标题使用
+            # 输出日期供邮件使用
             echo "REPORT_DATE=$REPORT_DATE" >> $GITHUB_OUTPUT
+            echo "REPORT_DATETIME=$REPORT_DATETIME" >> $GITHUB_OUTPUT
             RUN_ENV="${{ github.event.inputs.environment || 'prod' }}"
             TRIGGER_TYPE="${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}"
             GITHUB_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -164,13 +166,13 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Gumtree 广告清理日报 - ${{ steps.generate_summary.outputs.REPORT_DATE }} [${{ github.event.inputs.environment || 'prod' }}]"
+          subject: "Gumtree 线上测试数据清理日报 - ${{ steps.generate_summary.outputs.REPORT_DATE }} [${{ github.event.inputs.environment || 'prod' }}]"
           to: hanxuhao@58.com
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
-            ✅ Gumtree 广告清理任务执行完成
+            ✅ Gumtree 线上测试数据清理任务执行完成
             
-            📅 执行时间: ${{ steps.generate_summary.outputs.REPORT_DATE }}
+            📅 执行时间: ${{ steps.generate_summary.outputs.REPORT_DATETIME }}
             🌍 运行环境: ${{ github.event.inputs.environment || 'prod' }}
             🚀 触发方式: ${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}
             
@@ -181,7 +183,7 @@ jobs:
             非活跃广告: ${{ steps.generate_summary.outputs.TOTAL_INACTIVE }} 个
             成功删除: ${{ steps.generate_summary.outputs.TOTAL_DELETED }} 个
             
-            📄 详细报告请查看附件（精美 HTML 格式）
+            📄 详细报告请查看附件
             
             🔗 查看完整日志:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
