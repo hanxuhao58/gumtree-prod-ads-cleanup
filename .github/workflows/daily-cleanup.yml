@@ -83,27 +83,25 @@ jobs:
             echo "TOTAL_DELETED=$TOTAL_DELETED" >> $GITHUB_OUTPUT
             
             # 生成详细报告
-            cat > report_summary.txt << 'REPORT_EOF'
-Gumtree 广告清理日报
-==================
-
-执行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')
-环境: 生产环境 (mobile-apps-bff.gumtree.com)
-
-总体统计
---------
-处理账号数: $TOTAL_ACCOUNTS
-活跃广告: $TOTAL_ACTIVE 个
-非活跃广告: $TOTAL_INACTIVE 个
-总计: $((TOTAL_ACTIVE + TOTAL_INACTIVE)) 个
-成功删除: $TOTAL_DELETED 个
-
-逐账号详情
-----------
-REPORT_EOF
-            
-            # 提取每个账号的详细信息
-            grep -A 5 "账号.*处理完成" "$LOG_FILE" | grep -E "账号|活跃广告|非活跃广告|合计|成功删除" >> report_summary.txt || true
+            {
+              echo "Gumtree 广告清理日报"
+              echo "=================="
+              echo ""
+              echo "执行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+              echo "环境: 生产环境 (mobile-apps-bff.gumtree.com)"
+              echo ""
+              echo "总体统计"
+              echo "--------"
+              echo "处理账号数: $TOTAL_ACCOUNTS"
+              echo "活跃广告: $TOTAL_ACTIVE 个"
+              echo "非活跃广告: $TOTAL_INACTIVE 个"
+              echo "总计: $((TOTAL_ACTIVE + TOTAL_INACTIVE)) 个"
+              echo "成功删除: $TOTAL_DELETED 个"
+              echo ""
+              echo "逐账号详情"
+              echo "----------"
+              grep -A 5 "账号.*处理完成" "$LOG_FILE" | grep -E "账号|活跃广告|非活跃广告|合计|成功删除" || true
+            } > report_summary.txt
             
             echo "✅ 报告生成完成"
             cat report_summary.txt
