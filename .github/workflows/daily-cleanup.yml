@@ -83,7 +83,7 @@ jobs:
             echo "TOTAL_DELETED=$TOTAL_DELETED" >> $GITHUB_OUTPUT
             
             # 生成详细报告
-            cat > report_summary.txt << EOF
+            cat > report_summary.txt << 'REPORT_EOF'
 Gumtree 广告清理日报
 ==================
 
@@ -100,7 +100,7 @@ Gumtree 广告清理日报
 
 逐账号详情
 ----------
-EOF
+REPORT_EOF
             
             # 提取每个账号的详细信息
             grep -A 5 "账号.*处理完成" "$LOG_FILE" | grep -E "账号|活跃广告|非活跃广告|合计|成功删除" >> report_summary.txt || true
