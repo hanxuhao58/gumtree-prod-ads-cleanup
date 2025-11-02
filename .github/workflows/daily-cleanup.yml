@@ -86,6 +86,9 @@ jobs:
             # 生成日期和环境信息
             REPORT_DATE=$(date '+%Y年%m月%d日')
             REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S %Z')
+            
+            # 输出日期供邮件标题使用
+            echo "REPORT_DATE=$REPORT_DATE" >> $GITHUB_OUTPUT
             RUN_ENV="${{ github.event.inputs.environment || 'prod' }}"
             TRIGGER_TYPE="${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}"
             GITHUB_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -161,33 +164,48 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Gumtree 广告清理日报 - $(date '+%Y年%m月%d日') [${{ github.event.inputs.environment || 'prod' }}]"
+          subject: "Gumtree 广告清理日报 - ${{ steps.generate_summary.outputs.REPORT_DATE }} [${{ github.event.inputs.environment || 'prod' }}]"
           to: hanxuhao@58.com
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
-            Gumtree 广告清理任务执行完成
+            ========================================
+            📊 Gumtree 广告清理日报
+            ========================================
             
-            执行时间: ${{ github.event.repository.updated_at }}
-            运行编号: ${{ github.run_number }}
+            执行时间: ${{ steps.generate_summary.outputs.REPORT_DATE }}
             运行环境: ${{ github.event.inputs.environment || 'prod' }}
             触发方式: ${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}
             
-            📊 执行摘要
-            ================
-            处理账号数: ${{ steps.generate_summary.outputs.TOTAL_ACCOUNTS }}
-            活跃广告: ${{ steps.generate_summary.outputs.TOTAL_ACTIVE }} 个
+            ========================================
+            📈 总体统计
+            ========================================
+            
+            处理账号数: ${{ steps.generate_summary.outputs.TOTAL_ACCOUNTS }} 个
+            活跃广告:   ${{ steps.generate_summary.outputs.TOTAL_ACTIVE }} 个
             非活跃广告: ${{ steps.generate_summary.outputs.TOTAL_INACTIVE }} 个
-            成功删除: ${{ steps.generate_summary.outputs.TOTAL_DELETED }} 个
+            成功删除:   ${{ steps.generate_summary.outputs.TOTAL_DELETED }} 个
             
-            📄 详细报告请查看附件
+            ========================================
+            📄 详细报告
+            ========================================
             
-            🔗 查看完整日志:
+            请查看附件中的 HTML 报告，包含：
+            ✓ 美观的可视化统计
+            ✓ 逐账号详细数据
+            ✓ 完整的执行信息
+            
+            ========================================
+            🔗 相关链接
+            ========================================
+            
+            查看完整日志:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             
-            ---
+            ========================================
+            
             此邮件由 GitHub Actions 自动发送
+            如有问题，请检查上方的完整日志链接
           attachments: report_summary.html
-          html_body: report_summary.html
           convert_markdown: false
           priority: normal
 
