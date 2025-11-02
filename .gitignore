@@ -1,0 +1,34 @@
+# JMeter 输出文件
+*.jtl
+*.log
+jmeter.log
+
+# 数据文件（临时生成的）
+data/auth_tokens.csv
+data/ad_ids.csv
+
+# 账号文件（敏感信息，建议本地保存）
+# data/accounts.csv
+
+# 报告目录
+reports/*
+!reports/.gitkeep
+
+# 日志目录
+logs/*
+!logs/.gitkeep
+
+# JMeter临时文件
+*.jmx~
+*.bak
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+

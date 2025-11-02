@@ -1,0 +1,506 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="广告批量删除 - 多账号版本V2">
+      <stringProp name="TestPlan.comments">修复版：使用Loop Controller代替While Controller</stringProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="projectRoot" elementType="Argument">
+            <stringProp name="Argument.name">projectRoot</stringProp>
+            <stringProp name="Argument.value">${__BeanShell(import org.apache.jmeter.services.FileServer; FileServer.getFileServer().getBaseDir();)}</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      
+      <!-- ========== 统计账号数量 ========== -->
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="Setup: 统计账号数量">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="统计CSV中的账号数">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="script">import java.io.File
+
+String projectRoot = props.get("projectRoot") ?: System.getProperty("user.dir")
+File csvFile = new File(projectRoot, "../data/accounts.csv")
+
+int accountCount = 0
+csvFile.eachLine { line, lineNum -&gt;
+    if (lineNum &gt; 1) { // Skip header
+        if (line.trim() &amp;&amp; line.toUpperCase().endsWith("TRUE")) {
+            accountCount++
+        }
+    }
+}
+
+props.put("TOTAL_ACCOUNTS", accountCount.toString())
+log.info("=" * 80)
+log.info("📊 发现 ${accountCount} 个启用的账号")
+log.info("=" * 80)
+
+SampleResult.setSuccessful(true)
+SampleResult.setResponseMessage("找到 ${accountCount} 个账号")
+</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+      
+      <!-- ========== 主循环：遍历所有账号 ========== -->
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Main: 批量处理所有账号">
+        <intProp name="ThreadGroup.num_threads">1</intProp>
+        <intProp name="ThreadGroup.ramp_time">1</intProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController">
+          <stringProp name="LoopController.loops">999999</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        
+        <!-- 读取账号列表CSV -->
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="读取账号信息">
+          <stringProp name="delimiter">,</stringProp>
+          <stringProp name="fileEncoding">UTF-8</stringProp>
+          <stringProp name="filename">${__BeanShell(import org.apache.jmeter.services.FileServer; FileServer.getFileServer().getBaseDir();)}/../data/accounts.csv</stringProp>
+          <boolProp name="ignoreFirstLine">true</boolProp>
+          <boolProp name="quotedData">false</boolProp>
+          <boolProp name="recycle">false</boolProp>
+          <stringProp name="shareMode">shareMode.all</stringProp>
+          <boolProp name="stopThread">true</boolProp>
+          <stringProp name="variableNames">username,password,team_member,notes,enabled</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+        
+        <!-- 强制逐行装载CSV并设置标志 -->
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="[0] 读取一行并设置标志">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="script">// 强制触发CSV变量装载
+String u = vars.get('username')
+String en = (vars.get('enabled') ?: '').toString().toUpperCase()
+vars.put('enabled_upper', en)
+if (u) {
+    log.info("🔎 本次迭代账号: ${vars.get('team_member')} &lt;${u}&gt; | enabled=${en}")
+}
+SampleResult.setSuccessful(true)
+SampleResult.setResponseMessage('ok')
+</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+        
+        <!-- 只处理enabled=TRUE的账号 -->
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="只处理启用的账号">
+          <stringProp name="IfController.condition">${__groovy(vars.get('enabled_upper') == 'TRUE')}</stringProp>
+        </IfController>
+        <hashTree>
+          
+          <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="【${__threadNum}】处理账号: ${team_member}">
+            <boolProp name="TransactionController.includeTimers">false</boolProp>
+            <boolProp name="TransactionController.parent">true</boolProp>
+          </TransactionController>
+          <hashTree>
+            
+            <!-- ========== 初始化 ========== -->
+            <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="[1] 初始化账号">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="script">import java.util.UUID
+
+// 生成Session ID
+String sessionId = UUID.randomUUID().toString().replaceAll("-", "").toLowerCase()
+vars.put("threat_metrix_session", sessionId)
+
+// 初始化计数器
+vars.put("account_total_ads", "0")
+vars.put("account_total_active_ads", "0")
+vars.put("account_total_inactive_ads", "0")
+vars.put("account_deleted_ads", "0")
+
+log.info("")
+log.info("=" * 80)
+log.info("🔄 【账号 ${__threadNum}】开始处理: ${vars.get('team_member')} (${vars.get('username')})")
+log.info("=" * 80)
+
+SampleResult.setSuccessful(true)
+SampleResult.setResponseMessage("账号初始化完成")
+</stringProp>
+            </JSR223Sampler>
+            <hashTree/>
+            
+            <!-- ========== Step 1: 登录 ========== -->
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="登录Header">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Content-Type</stringProp>
+                  <stringProp name="Header.value">${__P(ANDROID_CONTENT_TYPE)}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">user-agent</stringProp>
+                  <stringProp name="Header.value">${__P(ANDROID_USER_AGENT)}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">platform</stringProp>
+                  <stringProp name="Header.value">${__P(ANDROID_PLATFORM)}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">udid</stringProp>
+                  <stringProp name="Header.value">${__P(ANDROID_UDID)}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">threat-metrix-session</stringProp>
+                  <stringProp name="Header.value">${threat_metrix_session}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree/>
+            
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="[2] 登录: ${username}">
+              <stringProp name="HTTPSampler.domain">${__P(HOST_BFF)}</stringProp>
+              <stringProp name="HTTPSampler.protocol">${__P(PROTOCOL)}</stringProp>
+              <stringProp name="HTTPSampler.path">/v1/login</stringProp>
+              <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="userName" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">true</boolProp>
+                    <stringProp name="Argument.value">${username}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                    <boolProp name="HTTPArgument.use_equals">true</boolProp>
+                    <stringProp name="Argument.name">userName</stringProp>
+                  </elementProp>
+                  <elementProp name="userSecret" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">true</boolProp>
+                    <stringProp name="Argument.value">${password}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                    <boolProp name="HTTPArgument.use_equals">true</boolProp>
+                    <stringProp name="Argument.name">userSecret</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="提取Token">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+
+if (!prev.isSuccessful()) {
+    log.error("❌ 登录失败: ${prev.getResponseCode()} - ${prev.getResponseMessage()}")
+    vars.put("loginSuccess", "false")
+    return
+}
+
+try {
+    String responseData = prev.getResponseDataAsString()
+    def json = new JsonSlurper().parseText(responseData)
+    
+    String userId = json.userId?.toString()
+    String userToken = json.userToken?.toString()
+    String userAuthorization = json.userAuthorization?.toString()
+    String accountId = json.accountId?.toString()
+    
+    if (!(userId &amp;&amp; userToken &amp;&amp; userAuthorization)) {
+        log.error("❌ 缺少认证字段")
+        vars.put("loginSuccess", "false")
+        return
+    }
+    
+    vars.put("current_userId", userId)
+    vars.put("current_userToken", userToken)
+    vars.put("current_userAuthorization", userAuthorization)
+    vars.put("current_accountId", accountId)
+    vars.put("loginSuccess", "true")
+    
+    log.info("✅ 登录成功 (userId: ${userId}, accountId: ${accountId})")
+    
+} catch (Exception e) {
+    log.error("❌ Token提取异常: " + e.message)
+    vars.put("loginSuccess", "false")
+}
+</stringProp>
+              </JSR223PostProcessor>
+              <hashTree/>
+            </hashTree>
+            
+            <!-- ========== Step 2: 提取广告 ========== -->
+            <IfController guiclass="IfControllerPanel" testclass="IfController" testname="如果登录成功">
+              <stringProp name="IfController.condition">${__javaScript("${loginSuccess}" == "true",)}</stringProp>
+            </IfController>
+            <hashTree>
+              
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="MyGumtree Header">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">authorisation-user</stringProp>
+                    <stringProp name="Header.value">Basic bW9iaWxlOjBudGgzbTB2MyE=</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">authorisation-user-email</stringProp>
+                    <stringProp name="Header.value">${username}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">authorisation-user-token</stringProp>
+                    <stringProp name="Header.value">${current_userToken}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">authorization</stringProp>
+                    <stringProp name="Header.value">${current_userAuthorization}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">user-agent</stringProp>
+                    <stringProp name="Header.value">${__P(IOS_USER_AGENT_BFF)}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">platform</stringProp>
+                    <stringProp name="Header.value">${__P(IOS_PLATFORM)}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">userid</stringProp>
+                    <stringProp name="Header.value">${current_userId}</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">accountid</stringProp>
+                    <stringProp name="Header.value">${current_accountId}</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree/>
+              
+              <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="[3] 获取广告列表">
+                <stringProp name="HTTPSampler.domain">${__P(HOST_BFF)}</stringProp>
+                <stringProp name="HTTPSampler.protocol">${__P(PROTOCOL)}</stringProp>
+                <stringProp name="HTTPSampler.path">/v2/my-gumtree/screen</stringProp>
+                <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+                <stringProp name="HTTPSampler.method">GET</stringProp>
+                <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+                <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+                <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                  <collectionProp name="Arguments.arguments"/>
+                </elementProp>
+              </HTTPSamplerProxy>
+              <hashTree>
+                <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="提取活跃广告ID">
+                  <stringProp name="scriptLanguage">groovy</stringProp>
+                  <stringProp name="script">import groovy.json.JsonSlurper
+
+if (!prev.isSuccessful()) {
+    log.error("❌ 获取广告列表失败")
+    vars.put("adIdCount", "0")
+    vars.put("account_total_active_ads", "0")
+    vars.put("account_total_inactive_ads", "0")
+    vars.put("account_total_ads", "0")
+    return
+}
+
+try {
+    String responseData = prev.getResponseDataAsString()
+    def json = new JsonSlurper().parseText(responseData)
+    def activeIds = []
+    def inactiveIds = []
+    
+    def portraitData = json.portraitData
+    if (portraitData) {
+        portraitData.each { item -&gt;
+            if (item.type == "MY_GUMTREE_LISTING_ROW" &amp;&amp; item.data) {
+                item.data.each { card -&gt;
+                    if (card.type == "MY_GUMTREE_LISTING_CARD" &amp;&amp; card.adId) {
+                        def isActive = (card.isActive != null ? card.isActive : false)
+                        if (isActive) {
+                            activeIds.add(card.adId.toString())
+                            log.info("  ✅ 活跃广告: ${card.adId} - ${card.title ?: ''}")
+                        } else {
+                            inactiveIds.add(card.adId.toString())
+                            log.info("  💤 非活跃广告: ${card.adId} - ${card.title ?: ''}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 用于删除循环（仅活跃）
+    vars.put("adIdCount", activeIds.size().toString())
+    vars.put("adIdList", activeIds.join(","))
+    // 记录非活跃列表（仅日志/统计用）
+    vars.put("inactiveAdIdList", inactiveIds.join(","))
+
+    // 账号级统计
+    vars.put("account_total_active_ads", activeIds.size().toString())
+    vars.put("account_total_inactive_ads", inactiveIds.size().toString())
+    vars.put("account_total_ads", (activeIds.size() + inactiveIds.size()).toString())
+
+    log.info("✅ 进入 MyGumtree 页面成功 (HTTP ${prev.getResponseCode()})")
+    log.info("📊 活跃广告: ${activeIds.size()} | 非活跃广告: ${inactiveIds.size()} | 总计: ${activeIds.size() + inactiveIds.size()}")
+    
+} catch (Exception e) {
+    log.error("❌ 提取广告ID异常: " + e.message)
+    vars.put("adIdCount", "0")
+    vars.put("account_total_active_ads", "0")
+    vars.put("account_total_inactive_ads", "0")
+    vars.put("account_total_ads", "0")
+}
+</stringProp>
+                </JSR223PostProcessor>
+                <hashTree/>
+              </hashTree>
+              
+              <!-- ========== Step 3: 批量删除 ========== -->
+              <LoopController guiclass="LoopControllerGui" testclass="LoopController" testname="循环删除">
+                <stringProp name="LoopController.loops">${adIdCount}</stringProp>
+              </LoopController>
+              <hashTree>
+                
+                <CounterConfig guiclass="CounterConfigGui" testclass="CounterConfig" testname="删除计数器">
+                  <stringProp name="CounterConfig.start">0</stringProp>
+                  <stringProp name="CounterConfig.end"></stringProp>
+                  <stringProp name="CounterConfig.incr">1</stringProp>
+                  <stringProp name="CounterConfig.name">deleteCounter</stringProp>
+                  <stringProp name="CounterConfig.format"></stringProp>
+                  <boolProp name="CounterConfig.per_user">true</boolProp>
+                  <boolProp name="CounterConfig.reset_on_tg_iteration">true</boolProp>
+                </CounterConfig>
+                <hashTree/>
+                
+                <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="获取当前广告ID">
+                  <stringProp name="scriptLanguage">groovy</stringProp>
+                  <stringProp name="script">String adIdList = vars.get("adIdList")
+int index = Integer.parseInt(vars.get("deleteCounter"))
+
+if (adIdList &amp;&amp; !adIdList.isEmpty()) {
+    def adIds = adIdList.split(",")
+    if (index &lt; adIds.length) {
+        vars.put("currentAdId", adIds[index])
+    }
+}
+</stringProp>
+                </JSR223PreProcessor>
+                <hashTree/>
+                
+                <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="[4] 删除广告: ${currentAdId}">
+                  <stringProp name="HTTPSampler.domain">${__P(HOST_BFF)}</stringProp>
+                  <stringProp name="HTTPSampler.protocol">${__P(PROTOCOL)}</stringProp>
+                  <stringProp name="HTTPSampler.path">/v2/my-gumtree/ad/${currentAdId}</stringProp>
+                  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+                  <stringProp name="HTTPSampler.method">DELETE</stringProp>
+                  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+                  <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+                  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                    <collectionProp name="Arguments.arguments"/>
+                  </elementProp>
+                </HTTPSamplerProxy>
+                <hashTree>
+                  <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="记录删除结果">
+                    <stringProp name="scriptLanguage">groovy</stringProp>
+                    <stringProp name="script">int currentCount = Integer.parseInt(vars.get("account_deleted_ads") ?: "0")
+
+if (prev.isSuccessful()) {
+    currentCount++
+    vars.put("account_deleted_ads", currentCount.toString())
+    log.info("  ✅ 广告 ${vars.get('currentAdId')} 删除成功 (${currentCount}/${vars.get('adIdCount')})")
+} else {
+    log.error("  ❌ 广告 ${vars.get('currentAdId')} 删除失败: ${prev.getResponseCode()}")
+}
+</stringProp>
+                  </JSR223PostProcessor>
+                  <hashTree/>
+                </hashTree>
+                
+                <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="删除间隔">
+                  <stringProp name="ConstantTimer.delay">${__P(DELETE_DELAY_MS,500)}</stringProp>
+                </ConstantTimer>
+                <hashTree/>
+                
+              </hashTree>
+              
+            </hashTree>
+            
+            <!-- ========== 账号完成统计 ========== -->
+            <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="[5] 账号处理完成">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="script">String activeAds = vars.get("account_total_active_ads") ?: "0"
+String inactiveAds = vars.get("account_total_inactive_ads") ?: "0"
+String totalAds = vars.get("account_total_ads") ?: "0"
+String deletedAds = vars.get("account_deleted_ads") ?: "0"
+
+log.info("")
+log.info("=" * 80)
+log.info("✅ 账号 ${vars.get('team_member')} (${vars.get('username')}) 处理完成")
+log.info("   📊 发现活跃广告: ${activeAds} 个")
+log.info("   💤 非活跃广告: ${inactiveAds} 个")
+log.info("   🧮 合计: ${totalAds} 个")
+log.info("   🗑️  成功删除: ${deletedAds} 个")
+log.info("=" * 80)
+log.info("")
+
+SampleResult.setSuccessful(true)
+SampleResult.setResponseMessage("完成")
+</stringProp>
+            </JSR223Sampler>
+            <hashTree/>
+            
+          </hashTree>
+          
+          <!-- 账号间延迟 -->
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="账号间延迟2秒">
+            <stringProp name="ConstantTimer.delay">2000</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+          
+        </hashTree>
+        
+      </hashTree>
+      
+      <!-- ========== 结果收集 ========== -->
+      <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="汇总报告">
+        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <objProp>
+          <name>saveConfig</name>
+          <value class="SampleSaveConfiguration">
+            <time>true</time>
+            <latency>true</latency>
+            <timestamp>true</timestamp>
+            <success>true</success>
+            <label>true</label>
+            <code>true</code>
+            <message>true</message>
+            <threadName>true</threadName>
+            <dataType>false</dataType>
+            <encoding>false</encoding>
+            <assertions>false</assertions>
+            <subresults>false</subresults>
+            <responseData>false</responseData>
+            <samplerData>false</samplerData>
+            <xml>false</xml>
+            <fieldNames>true</fieldNames>
+            <responseHeaders>false</responseHeaders>
+            <requestHeaders>false</requestHeaders>
+            <responseDataOnError>false</responseDataOnError>
+            <saveAssertionResultsFailureMessage>false</saveAssertionResultsFailureMessage>
+            <assertionsResultsToSave>0</assertionsResultsToSave>
+            <bytes>true</bytes>
+            <sentBytes>true</sentBytes>
+            <url>false</url>
+            <threadCounts>true</threadCounts>
+            <idleTime>true</idleTime>
+            <connectTime>true</connectTime>
+          </value>
+        </objProp>
+        <stringProp name="filename">${__BeanShell(import org.apache.jmeter.services.FileServer; FileServer.getFileServer().getBaseDir();)}/../reports/multi_cleanup_v2_${__time(yyyyMMdd_HHmmss)}.jtl</stringProp>
+      </ResultCollector>
+      <hashTree/>
+      
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
+
