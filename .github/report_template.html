@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gumtree 广告清理日报</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #2d3748;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .meta {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+        .meta p {
+            margin: 5px 0;
+            color: #4a5568;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 0;
+        }
+        .accounts {
+            margin-top: 30px;
+        }
+        .account-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .account-card h3 {
+            color: #2d3748;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+        }
+        .account-card h3::before {
+            content: "✅";
+            margin-right: 10px;
+        }
+        .account-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .account-stat {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #667eea;
+        }
+        .account-stat label {
+            display: block;
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        .account-stat value {
+            display: block;
+            font-size: 18px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-prod {
+            background: #f56565;
+            color: white;
+        }
+        .badge-bixi {
+            background: #48bb78;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Gumtree 广告清理日报</h1>
+        
+        <div class="meta">
+            <p><strong>执行时间：</strong>{{REPORT_TIME}}</p>
+            <p><strong>运行环境：</strong>{{RUN_ENV}} <span class="badge badge-{{ENV_CLASS}}">{{ENV_NAME}}</span></p>
+            <p><strong>触发方式：</strong>{{TRIGGER_TYPE}}</p>
+        </div>
+        
+        <h2>📈 总体统计</h2>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>处理账号数</h3>
+                <p class="number">{{TOTAL_ACCOUNTS}}</p>
+            </div>
+            <div class="stat-card">
+                <h3>活跃广告</h3>
+                <p class="number">{{TOTAL_ACTIVE}}</p>
+            </div>
+            <div class="stat-card">
+                <h3>非活跃广告</h3>
+                <p class="number">{{TOTAL_INACTIVE}}</p>
+            </div>
+            <div class="stat-card">
+                <h3>成功删除</h3>
+                <p class="number">{{TOTAL_DELETED}}</p>
+            </div>
+        </div>
+        
+        <h2>👥 逐账号详情</h2>
+        <div class="accounts">
+{{ACCOUNTS_DETAILS}}
+        </div>
+        
+        <div class="footer">
+            <p>此报告由 GitHub Actions 自动生成</p>
+            <p>查看完整日志: <a href="{{GITHUB_RUN_URL}}">GitHub Actions</a></p>
+        </div>
+    </div>
+</body>
+</html>
+
