@@ -71,11 +71,11 @@ jobs:
           if [ -f "$LOG_FILE" ]; then
             echo "LOG_FILE=$LOG_FILE" >> $GITHUB_OUTPUT
             
-            # 提取统计信息
+            # 提取统计信息（只从账号处理完成的摘要中提取）
             TOTAL_ACCOUNTS=$(grep -c "账号.*处理完成" "$LOG_FILE" || echo "0")
-            TOTAL_ACTIVE=$(grep -oP "发现活跃广告: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
-            TOTAL_INACTIVE=$(grep -oP "非活跃广告: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
-            TOTAL_DELETED=$(grep -oP "成功删除: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
+            TOTAL_ACTIVE=$(grep "📊 发现活跃广告:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
+            TOTAL_INACTIVE=$(grep "💤 非活跃广告:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
+            TOTAL_DELETED=$(grep "🗑️  成功删除:" "$LOG_FILE" | grep -o "[0-9]\+ 个" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
             
             echo "TOTAL_ACCOUNTS=$TOTAL_ACCOUNTS" >> $GITHUB_OUTPUT
             echo "TOTAL_ACTIVE=$TOTAL_ACTIVE" >> $GITHUB_OUTPUT
