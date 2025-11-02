@@ -2,9 +2,23 @@ name: 每日广告清理任务
 
 on:
   schedule:
-    # 每天凌晨 2:00 UTC (北京时间 10:00 AM)
-    - cron: '0 2 * * *'
+    # 每天凌晨 3:00 北京时间 = 19:00 UTC (前一天)
+    - cron: '0 19 * * *'
   workflow_dispatch:  # 允许手动触发
+    inputs:
+      environment:
+        description: '运行环境'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - bixi
+      send_email:
+        description: '发送邮件报告'
+        required: true
+        default: true
+        type: boolean
 
 env:
   TZ: Asia/Shanghai
@@ -42,7 +56,10 @@ jobs:
         id: run_cleanup
         run: |
           cd scripts
-          bash run_cleanup_multi.sh --env prod <<< "yes"
+          # 使用手动输入的环境或默认使用 prod
+          ENV="${{ github.event.inputs.environment || 'prod' }}"
+          echo "运行环境: $ENV"
+          bash run_cleanup_multi.sh --env $ENV <<< "yes"
         continue-on-error: true
 
       - name: 生成报告摘要
@@ -110,14 +127,14 @@ EOF
           retention-days: 30
 
       - name: 发送邮件报告
-        if: always()
+        if: always() && (github.event.inputs.send_email != 'false')
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Gumtree 广告清理日报 - ${{ github.run_number }}"
+          subject: "Gumtree 广告清理日报 - ${{ github.run_number }} [${{ github.event.inputs.environment || 'prod' }}]"
           to: hanxuhao@58.com
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
@@ -125,6 +142,8 @@ EOF
             
             执行时间: ${{ github.event.repository.updated_at }}
             运行编号: ${{ github.run_number }}
+            运行环境: ${{ github.event.inputs.environment || 'prod' }}
+            触发方式: ${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}
             
             📊 执行摘要
             ================
