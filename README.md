@@ -128,10 +128,20 @@ chmod 600 data/accounts.csv
 # echo "data/accounts.csv" >> .gitignore
 ```
 
+## 🤖 自动化运行
+
+已配置 GitHub Actions 工作流，支持：
+- ✅ 每天凌晨自动运行
+- ✅ 生成详细报告
+- ✅ 发送邮件通知
+
+**配置指南**: [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)
+
 ## 📚 详细文档
 
 - **账号管理详细指南**: [ACCOUNTS_GUIDE.md](ACCOUNTS_GUIDE.md)
 - **多账号使用说明**: [MULTI_ACCOUNT_README.md](MULTI_ACCOUNT_README.md)
+- **GitHub Actions 配置**: [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)
 
 ## 🆘 常见问题
 

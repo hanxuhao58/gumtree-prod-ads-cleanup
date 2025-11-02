@@ -1,0 +1,154 @@
+name: 每日广告清理任务
+
+on:
+  schedule:
+    # 每天凌晨 2:00 UTC (北京时间 10:00 AM)
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  cleanup-ads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Java 环境
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 安装 JMeter
+        run: |
+          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          tar -xzf apache-jmeter-5.6.3.tgz
+          sudo mv apache-jmeter-5.6.3 /opt/jmeter
+          echo "/opt/jmeter/bin" >> $GITHUB_PATH
+
+      - name: 验证 JMeter 安装
+        run: |
+          jmeter --version
+
+      - name: 创建必要目录
+        run: |
+          mkdir -p logs reports data
+
+      - name: 运行广告清理脚本
+        id: run_cleanup
+        run: |
+          cd scripts
+          bash run_cleanup_multi.sh --env prod <<< "yes"
+        continue-on-error: true
+
+      - name: 生成报告摘要
+        id: generate_summary
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          LOG_FILE=$(ls -t logs/multi_cleanup_*.log 2>/dev/null | head -1)
+          
+          if [ -f "$LOG_FILE" ]; then
+            echo "LOG_FILE=$LOG_FILE" >> $GITHUB_OUTPUT
+            
+            # 提取统计信息
+            TOTAL_ACCOUNTS=$(grep -c "账号.*处理完成" "$LOG_FILE" || echo "0")
+            TOTAL_ACTIVE=$(grep -oP "发现活跃广告: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
+            TOTAL_INACTIVE=$(grep -oP "非活跃广告: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
+            TOTAL_DELETED=$(grep -oP "成功删除: \K\d+" "$LOG_FILE" | awk '{sum += $1} END {print sum+0}')
+            
+            echo "TOTAL_ACCOUNTS=$TOTAL_ACCOUNTS" >> $GITHUB_OUTPUT
+            echo "TOTAL_ACTIVE=$TOTAL_ACTIVE" >> $GITHUB_OUTPUT
+            echo "TOTAL_INACTIVE=$TOTAL_INACTIVE" >> $GITHUB_OUTPUT
+            echo "TOTAL_DELETED=$TOTAL_DELETED" >> $GITHUB_OUTPUT
+            
+            # 生成详细报告
+            cat > report_summary.txt << EOF
+Gumtree 广告清理日报
+==================
+
+执行时间: $(date '+%Y-%m-%d %H:%M:%S %Z')
+环境: 生产环境 (mobile-apps-bff.gumtree.com)
+
+总体统计
+--------
+处理账号数: $TOTAL_ACCOUNTS
+活跃广告: $TOTAL_ACTIVE 个
+非活跃广告: $TOTAL_INACTIVE 个
+总计: $((TOTAL_ACTIVE + TOTAL_INACTIVE)) 个
+成功删除: $TOTAL_DELETED 个
+
+逐账号详情
+----------
+EOF
+            
+            # 提取每个账号的详细信息
+            grep -A 5 "账号.*处理完成" "$LOG_FILE" | grep -E "账号|活跃广告|非活跃广告|合计|成功删除" >> report_summary.txt || true
+            
+            echo "✅ 报告生成完成"
+            cat report_summary.txt
+          else
+            echo "❌ 未找到日志文件"
+            echo "TOTAL_ACCOUNTS=0" >> $GITHUB_OUTPUT
+            echo "TOTAL_ACTIVE=0" >> $GITHUB_OUTPUT
+            echo "TOTAL_INACTIVE=0" >> $GITHUB_OUTPUT
+            echo "TOTAL_DELETED=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 上传日志文件
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-logs-${{ github.run_number }}
+          path: |
+            logs/*.log
+            reports/*.jtl
+            report_summary.txt
+          retention-days: 30
+
+      - name: 发送邮件报告
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Gumtree 广告清理日报 - ${{ github.run_number }}"
+          to: hanxuhao@58.com
+          from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            Gumtree 广告清理任务执行完成
+            
+            执行时间: ${{ github.event.repository.updated_at }}
+            运行编号: ${{ github.run_number }}
+            
+            📊 执行摘要
+            ================
+            处理账号数: ${{ steps.generate_summary.outputs.TOTAL_ACCOUNTS }}
+            活跃广告: ${{ steps.generate_summary.outputs.TOTAL_ACTIVE }} 个
+            非活跃广告: ${{ steps.generate_summary.outputs.TOTAL_INACTIVE }} 个
+            成功删除: ${{ steps.generate_summary.outputs.TOTAL_DELETED }} 个
+            
+            📄 详细报告请查看附件
+            
+            🔗 查看完整日志:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ---
+            此邮件由 GitHub Actions 自动发送
+          attachments: report_summary.txt
+          priority: normal
+
+      - name: 通知执行结果
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 任务执行成功"
+          else
+            echo "❌ 任务执行失败"
+          fi
+
