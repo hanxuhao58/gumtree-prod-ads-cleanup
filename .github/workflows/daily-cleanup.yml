@@ -8,7 +8,7 @@ on:
   workflow_dispatch:  # 允许手动触发
     inputs:
       environment:
-        description: '运行环境'
+        description: '运行环境（prod=生产环境，bixi=测试环境）'
         required: true
         default: 'prod'
         type: choice
@@ -16,10 +16,15 @@ on:
           - prod
           - bixi
       send_email:
-        description: '发送邮件报告'
+        description: '是否发送邮件报告'
         required: true
         default: true
         type: boolean
+      run_reason:
+        description: '运行原因/备注（可选，用于记录手动触发的原因）'
+        required: false
+        type: string
+        default: '手动触发'
 
 env:
   TZ: Asia/Shanghai
@@ -93,7 +98,11 @@ jobs:
             echo "REPORT_DATE=$REPORT_DATE" >> $GITHUB_OUTPUT
             echo "REPORT_DATETIME=$REPORT_DATETIME" >> $GITHUB_OUTPUT
             RUN_ENV="${{ github.event.inputs.environment || 'prod' }}"
-            TRIGGER_TYPE="${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}"
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              TRIGGER_TYPE="自动定时"
+            else
+              TRIGGER_TYPE="${{ github.event.inputs.run_reason || '手动触发' }}"
+            fi
             GITHUB_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             
             # 使用模板生成 HTML 报告
@@ -175,7 +184,8 @@ jobs:
             
             📅 执行时间: ${{ steps.generate_summary.outputs.REPORT_DATETIME }}
             🌍 运行环境: ${{ github.event.inputs.environment || 'prod' }}
-            🚀 触发方式: ${{ github.event_name == 'schedule' && '自动定时' || '手动触发' }}
+            🚀 触发方式: ${{ github.event_name == 'schedule' && '自动定时' || (github.event.inputs.run_reason || '手动触发') }}
+            ${{ github.event.inputs.run_reason && format('📝 运行原因: {0}', github.event.inputs.run_reason) || '' }}
             
             📊 执行摘要
             ================
