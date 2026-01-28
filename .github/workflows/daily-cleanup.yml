@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: '手动触发'
+      account:
+        description: '指定账号邮箱（可选，留空则运行所有启用的账号）'
+        required: false
+        type: string
+        default: ''
 
 env:
   TZ: Asia/Shanghai
@@ -115,8 +120,16 @@ jobs:
           cd scripts
           # 使用手动输入的环境或默认使用 prod
           ENV="${{ github.event.inputs.environment || 'prod' }}"
+          ACCOUNT="${{ github.event.inputs.account || '' }}"
+          
           echo "运行环境: $ENV"
-          bash run_cleanup_multi.sh --env $ENV <<< "yes"
+          if [ -n "$ACCOUNT" ]; then
+            echo "指定账号: $ACCOUNT"
+            bash run_cleanup_multi.sh --env $ENV --account "$ACCOUNT" <<< "yes"
+          else
+            echo "运行所有启用的账号"
+            bash run_cleanup_multi.sh --env $ENV <<< "yes"
+          fi
         continue-on-error: true
 
       - name: 生成报告摘要
@@ -237,6 +250,7 @@ jobs:
             🌍 运行环境: ${{ github.event.inputs.environment || 'prod' }}
             🚀 触发方式: ${{ github.event_name == 'schedule' && '自动定时' || (github.event.inputs.run_reason || '手动触发') }}
             ${{ github.event.inputs.run_reason && format('📝 运行原因: {0}', github.event.inputs.run_reason) || '' }}
+            ${{ github.event.inputs.account && format('👤 指定账号: {0}', github.event.inputs.account) || '👤 运行账号: 所有启用的账号' }}
             
             📊 执行摘要
             ================

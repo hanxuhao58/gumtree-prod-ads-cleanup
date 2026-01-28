@@ -27,6 +27,8 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # 配置文件与目录
 # 默认环境为 prod，可通过 --env bixi 切换测试
 ENV_NAME="prod"
+# 可选：指定要运行的账号（邮箱或用户名），为空则运行所有启用的账号
+SELECTED_ACCOUNT=""
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
@@ -35,8 +37,22 @@ while [[ $# -gt 0 ]]; do
             ENV_NAME="$2"; shift 2 ;;
         --env=*)
             ENV_NAME="${1#*=}"; shift ;;
+        -a|--account)
+            SELECTED_ACCOUNT="$2"; shift 2 ;;
+        --account=*)
+            SELECTED_ACCOUNT="${1#*=}"; shift ;;
         -h|--help)
-            echo "用法: bash run_cleanup_multi.sh [--env prod|bixi]"; exit 0 ;;
+            echo "用法: bash run_cleanup_multi.sh [--env prod|bixi] [--account EMAIL]"
+            echo ""
+            echo "选项:"
+            echo "  --env, -e        运行环境 (prod|bixi)，默认: prod"
+            echo "  --account, -a    指定要运行的账号邮箱，为空则运行所有启用的账号"
+            echo "  --help, -h       显示此帮助信息"
+            echo ""
+            echo "示例:"
+            echo "  bash run_cleanup_multi.sh                    # 运行所有账号"
+            echo "  bash run_cleanup_multi.sh --account donny.han@gumtree.com  # 只运行指定账号"
+            exit 0 ;;
         *)
             shift ;;
     esac
@@ -58,6 +74,27 @@ LOGS_DIR="${PROJECT_ROOT}/logs"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${LOGS_DIR}/multi_cleanup_${TIMESTAMP}.log"
 REPORT_FILE="${REPORTS_DIR}/multi_cleanup_${TIMESTAMP}.html"
+
+# 如果指定了账号，创建临时账号文件
+TEMP_ACCOUNTS_FILE=""
+if [ -n "$SELECTED_ACCOUNT" ]; then
+    TEMP_ACCOUNTS_FILE="${DATA_DIR}/accounts_temp_${TIMESTAMP}.csv"
+    # 创建临时文件，包含表头和匹配的账号
+    head -n 1 "$ACCOUNTS_FILE" > "$TEMP_ACCOUNTS_FILE"
+    # 查找匹配的账号（支持邮箱或用户名匹配）
+    grep -i "$SELECTED_ACCOUNT" "$ACCOUNTS_FILE" | grep -iE ",(TRUE|true)$" >> "$TEMP_ACCOUNTS_FILE" || true
+    
+    # 检查是否找到账号
+    if [ $(wc -l < "$TEMP_ACCOUNTS_FILE") -le 1 ]; then
+        print_error "未找到匹配的账号: $SELECTED_ACCOUNT"
+        print_info "请检查账号邮箱是否正确，且账号状态为 enabled=TRUE"
+        rm -f "$TEMP_ACCOUNTS_FILE"
+        exit 1
+    fi
+    
+    ACCOUNTS_FILE="$TEMP_ACCOUNTS_FILE"
+    print_info "已选择单独账号运行模式: $SELECTED_ACCOUNT"
+fi
 
 ###############################################################################
 # 函数定义
@@ -270,6 +307,12 @@ cleanup_temp_files() {
     print_info "清理7天前的旧文件..."
     find "$LOGS_DIR" -name "*.log" -mtime +7 -delete 2>/dev/null || true
     find "$REPORTS_DIR" -name "*.jtl" -mtime +7 -delete 2>/dev/null || true
+    
+    # 清理临时账号文件
+    if [ -n "$TEMP_ACCOUNTS_FILE" ] && [ -f "$TEMP_ACCOUNTS_FILE" ]; then
+        rm -f "$TEMP_ACCOUNTS_FILE"
+        print_info "已清理临时账号文件"
+    fi
 }
 
 ###############################################################################
