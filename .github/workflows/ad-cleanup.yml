@@ -122,14 +122,22 @@ jobs:
           ENV="${{ github.event.inputs.environment || 'prod' }}"
           ACCOUNT="${{ github.event.inputs.account || '' }}"
           
+          echo "=========================================="
           echo "运行环境: $ENV"
+          echo "当前工作目录: $(pwd)"
+          echo "脚本文件存在: $([ -f run_cleanup_multi.sh ] && echo '是' || echo '否')"
+          echo "账号文件存在: $([ -f ../data/accounts.csv ] && echo '是' || echo '否')"
           if [ -n "$ACCOUNT" ]; then
             echo "指定账号: $ACCOUNT"
-            bash run_cleanup_multi.sh --env $ENV --account "$ACCOUNT" <<< "yes"
+            echo "=========================================="
+            echo "yes" | bash run_cleanup_multi.sh --env $ENV --account "$ACCOUNT"
           else
             echo "运行所有启用的账号"
-            bash run_cleanup_multi.sh --env $ENV <<< "yes"
+            echo "=========================================="
+            echo "yes" | bash run_cleanup_multi.sh --env $ENV
           fi
+          echo "=========================================="
+          echo "脚本执行完成，退出码: $?"
         continue-on-error: true
 
       - name: 生成报告摘要
@@ -138,8 +146,17 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           LOG_FILE=$(ls -t logs/multi_cleanup_*.log 2>/dev/null | head -1)
           
-          if [ -f "$LOG_FILE" ]; then
+          echo "查找日志文件..."
+          if [ -z "$LOG_FILE" ] || [ ! -f "$LOG_FILE" ]; then
+            echo "⚠️ 未找到日志文件，列出 logs 目录内容:"
+            ls -la logs/ 2>/dev/null || echo "logs 目录不存在"
+            LOG_FILE=""
+          else
+            echo "找到日志文件: $LOG_FILE"
             echo "LOG_FILE=$LOG_FILE" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
             
             # 提取统计信息（只从账号处理完成的摘要中提取）
             # 只统计带 ✅ 标记的账号处理完成行
@@ -214,11 +231,53 @@ jobs:
             echo "✅ HTML 报告生成完成"
             ls -lh report_summary.html
           else
-            echo "❌ 未找到日志文件"
+            echo "⚠️ 未找到日志文件，生成空报告"
             echo "TOTAL_ACCOUNTS=0" >> $GITHUB_OUTPUT
             echo "TOTAL_ACTIVE=0" >> $GITHUB_OUTPUT
             echo "TOTAL_INACTIVE=0" >> $GITHUB_OUTPUT
             echo "TOTAL_DELETED=0" >> $GITHUB_OUTPUT
+            
+            # 即使没有日志，也生成基本报告
+            REPORT_DATE=$(date '+%Y年%m月%d日')
+            REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S %Z')
+            REPORT_DATETIME=$(date '+%Y年%m月%d日 %H:%M:%S')
+            RUN_ENV="${{ github.event.inputs.environment || 'prod' }}"
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              TRIGGER_TYPE="自动定时"
+            else
+              TRIGGER_TYPE="${{ github.event.inputs.run_reason || '手动触发' }}"
+            fi
+            GITHUB_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            
+            echo "REPORT_DATE=$REPORT_DATE" >> $GITHUB_OUTPUT
+            echo "REPORT_DATETIME=$REPORT_DATETIME" >> $GITHUB_OUTPUT
+            
+            # 生成基本报告
+            if [ -f ".github/report_template.html" ]; then
+              cp .github/report_template.html report_summary.html
+              sed -i "s|{{REPORT_TIME}}|$REPORT_TIME|g" report_summary.html
+              sed -i "s|{{RUN_ENV}}|$RUN_ENV|g" report_summary.html
+              sed -i "s|{{TRIGGER_TYPE}}|$TRIGGER_TYPE|g" report_summary.html
+              sed -i "s|{{GITHUB_RUN_URL}}|$GITHUB_RUN_URL|g" report_summary.html
+              sed -i "s|{{TOTAL_ACCOUNTS}}|0|g" report_summary.html
+              sed -i "s|{{TOTAL_ACTIVE}}|0|g" report_summary.html
+              sed -i "s|{{TOTAL_INACTIVE}}|0|g" report_summary.html
+              sed -i "s|{{TOTAL_DELETED}}|0|g" report_summary.html
+              
+              if [ "$RUN_ENV" = "prod" ]; then
+                sed -i "s|{{ENV_CLASS}}|prod|g" report_summary.html
+                sed -i "s|{{ENV_NAME}}|生产环境|g" report_summary.html
+              else
+                sed -i "s|{{ENV_CLASS}}|bixi|g" report_summary.html
+                sed -i "s|{{ENV_NAME}}|测试环境|g" report_summary.html
+              fi
+              
+              # 清空账号详情部分
+              sed -i "/{{ACCOUNTS_DETAILS}}/d" report_summary.html
+              echo "✅ 基本 HTML 报告已生成"
+            else
+              echo "❌ 报告模板文件不存在"
+            fi
           fi
 
       - name: 上传日志文件

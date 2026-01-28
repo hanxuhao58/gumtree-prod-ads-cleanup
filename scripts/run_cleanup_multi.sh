@@ -75,25 +75,34 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="${LOGS_DIR}/multi_cleanup_${TIMESTAMP}.log"
 REPORT_FILE="${REPORTS_DIR}/multi_cleanup_${TIMESTAMP}.html"
 
-# 如果指定了账号，创建临时账号文件
-TEMP_ACCOUNTS_FILE=""
+# 如果指定了账号，备份原文件并创建过滤后的账号文件
+ORIGINAL_ACCOUNTS_FILE="${ACCOUNTS_FILE}"
+ACCOUNTS_BACKUP=""
 if [ -n "$SELECTED_ACCOUNT" ]; then
-    TEMP_ACCOUNTS_FILE="${DATA_DIR}/accounts_temp_${TIMESTAMP}.csv"
-    # 创建临时文件，包含表头和匹配的账号
-    head -n 1 "$ACCOUNTS_FILE" > "$TEMP_ACCOUNTS_FILE"
+    # 备份原文件
+    ACCOUNTS_BACKUP="${DATA_DIR}/accounts_backup_${TIMESTAMP}.csv"
+    cp "$ORIGINAL_ACCOUNTS_FILE" "$ACCOUNTS_BACKUP"
+    
+    # 创建过滤后的文件（直接替换原文件，因为JMeter硬编码了路径）
+    TEMP_FILTERED="${DATA_DIR}/accounts_filtered_${TIMESTAMP}.csv"
+    head -n 1 "$ORIGINAL_ACCOUNTS_FILE" > "$TEMP_FILTERED"
     # 查找匹配的账号（支持邮箱或用户名匹配）
-    grep -i "$SELECTED_ACCOUNT" "$ACCOUNTS_FILE" | grep -iE ",(TRUE|true)$" >> "$TEMP_ACCOUNTS_FILE" || true
+    grep -i "$SELECTED_ACCOUNT" "$ORIGINAL_ACCOUNTS_FILE" | grep -iE ",(TRUE|true)$" >> "$TEMP_FILTERED" || true
     
     # 检查是否找到账号
-    if [ $(wc -l < "$TEMP_ACCOUNTS_FILE") -le 1 ]; then
+    if [ $(wc -l < "$TEMP_FILTERED") -le 1 ]; then
         print_error "未找到匹配的账号: $SELECTED_ACCOUNT"
         print_info "请检查账号邮箱是否正确，且账号状态为 enabled=TRUE"
-        rm -f "$TEMP_ACCOUNTS_FILE"
+        # 恢复原文件
+        mv "$ACCOUNTS_BACKUP" "$ORIGINAL_ACCOUNTS_FILE"
+        rm -f "$TEMP_FILTERED"
         exit 1
     fi
     
-    ACCOUNTS_FILE="$TEMP_ACCOUNTS_FILE"
+    # 替换原文件（JMeter会读取这个路径）
+    mv "$TEMP_FILTERED" "$ORIGINAL_ACCOUNTS_FILE"
     print_info "已选择单独账号运行模式: $SELECTED_ACCOUNT"
+    print_info "已备份原账号文件到: $ACCOUNTS_BACKUP"
 fi
 
 ###############################################################################
@@ -308,10 +317,10 @@ cleanup_temp_files() {
     find "$LOGS_DIR" -name "*.log" -mtime +7 -delete 2>/dev/null || true
     find "$REPORTS_DIR" -name "*.jtl" -mtime +7 -delete 2>/dev/null || true
     
-    # 清理临时账号文件
-    if [ -n "$TEMP_ACCOUNTS_FILE" ] && [ -f "$TEMP_ACCOUNTS_FILE" ]; then
-        rm -f "$TEMP_ACCOUNTS_FILE"
-        print_info "已清理临时账号文件"
+    # 恢复原账号文件（如果使用了备份）
+    if [ -n "$ACCOUNTS_BACKUP" ] && [ -f "$ACCOUNTS_BACKUP" ]; then
+        mv "$ACCOUNTS_BACKUP" "$ORIGINAL_ACCOUNTS_FILE"
+        print_info "已恢复原账号文件"
     fi
 }
 
@@ -320,6 +329,9 @@ cleanup_temp_files() {
 ###############################################################################
 
 main() {
+    # 设置错误处理：确保退出时恢复原文件
+    trap 'if [ -n "$ACCOUNTS_BACKUP" ] && [ -f "$ACCOUNTS_BACKUP" ]; then mv "$ACCOUNTS_BACKUP" "$ORIGINAL_ACCOUNTS_FILE" 2>/dev/null || true; fi' EXIT
+    
     print_header "Gumtree 广告批量删除工具 - 多账号版"
     
     # 检查环境
@@ -344,6 +356,7 @@ main() {
         exit 0
     else
         print_error "批量清理执行失败，请检查日志: $LOG_FILE"
+        cleanup_temp_files
         exit 1
     fi
 }
