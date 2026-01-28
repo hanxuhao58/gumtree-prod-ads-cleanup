@@ -11,6 +11,14 @@
 
 set -e  # 遇到错误立即退出
 
+# 脚本目录
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+###############################################################################
+# 函数定义（必须在脚本开头定义，以便后续使用）
+###############################################################################
+
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,9 +28,33 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
-# 脚本目录
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+print_header() {
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
+}
+
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_info() {
+    echo -e "${CYAN}ℹ️  $1${NC}"
+}
+
+print_account() {
+    echo -e "${MAGENTA}👤 $1${NC}"
+}
 
 # 配置文件与目录
 # 默认环境为 prod，可通过 --env bixi 切换测试
@@ -106,36 +138,8 @@ if [ -n "$SELECTED_ACCOUNT" ]; then
 fi
 
 ###############################################################################
-# 函数定义
+# 功能函数
 ###############################################################################
-
-print_header() {
-    echo ""
-    echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}========================================${NC}"
-    echo ""
-}
-
-print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-print_info() {
-    echo -e "${CYAN}ℹ️  $1${NC}"
-}
-
-print_account() {
-    echo -e "${MAGENTA}👤 $1${NC}"
-}
 
 # 检查JMeter是否安装
 check_jmeter() {
