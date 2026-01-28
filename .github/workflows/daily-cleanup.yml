@@ -45,10 +45,61 @@ jobs:
 
       - name: 安装 JMeter
         run: |
-          wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          # 检查是否已安装
+          if [ -d "/opt/jmeter" ] && [ -f "/opt/jmeter/bin/jmeter" ]; then
+            echo "✅ JMeter 已存在，跳过下载"
+            echo "/opt/jmeter/bin" >> $GITHUB_PATH
+            jmeter --version
+            exit 0
+          fi
+          
+          # 尝试多个下载源，带重试机制
+          JMETER_URLS=(
+            "https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-5.6.3.tgz"
+            "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz"
+            "https://mirrors.tuna.tsinghua.edu.cn/apache/jmeter/binaries/apache-jmeter-5.6.3.tgz"
+          )
+          
+          DOWNLOAD_SUCCESS=false
+          for url in "${JMETER_URLS[@]}"; do
+            echo "🔄 尝试从 $url 下载 JMeter..."
+            
+            # 优先使用 wget，失败则使用 curl
+            if command -v wget &> /dev/null; then
+              if wget --timeout=30 --tries=3 --retry-connrefused --progress=bar:force "$url" -O apache-jmeter-5.6.3.tgz 2>&1; then
+                DOWNLOAD_SUCCESS=true
+                echo "✅ 使用 wget 下载成功"
+                break
+              fi
+            fi
+            
+            # 如果 wget 失败，尝试 curl
+            if command -v curl &> /dev/null; then
+              if curl -L --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 5 --progress-bar "$url" -o apache-jmeter-5.6.3.tgz; then
+                DOWNLOAD_SUCCESS=true
+                echo "✅ 使用 curl 下载成功"
+                break
+              fi
+            fi
+            
+            echo "❌ 下载失败，尝试下一个源..."
+            rm -f apache-jmeter-5.6.3.tgz
+          done
+          
+          if [ "$DOWNLOAD_SUCCESS" = false ] || [ ! -f "apache-jmeter-5.6.3.tgz" ]; then
+            echo "❌ 所有下载源都失败，请检查网络连接"
+            exit 1
+          fi
+          
+          echo "📦 解压 JMeter..."
           tar -xzf apache-jmeter-5.6.3.tgz
+          
+          echo "📁 安装到 /opt/jmeter..."
           sudo mv apache-jmeter-5.6.3 /opt/jmeter
           echo "/opt/jmeter/bin" >> $GITHUB_PATH
+          
+          echo "🧹 清理临时文件..."
+          rm -f apache-jmeter-5.6.3.tgz
 
       - name: 验证 JMeter 安装
         run: |
