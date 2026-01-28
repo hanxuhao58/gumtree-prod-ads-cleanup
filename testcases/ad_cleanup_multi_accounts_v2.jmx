@@ -306,8 +306,8 @@ if (!prev.isSuccessful()) {
 try {
     String responseData = prev.getResponseDataAsString()
     def json = new JsonSlurper().parseText(responseData)
-    def activeIds = []
-    def inactiveIds = []
+    def toDeleteIds = []  // 需要删除的广告ID（除了inactive状态外的所有广告）
+    def inactiveIds = []  // 不删除的广告ID（仅inactive状态）
     
     def portraitData = json.portraitData
     if (portraitData) {
@@ -315,13 +315,27 @@ try {
             if (item.type == "MY_GUMTREE_LISTING_ROW" &amp;&amp; item.data) {
                 item.data.each { card -&gt;
                     if (card.type == "MY_GUMTREE_LISTING_CARD" &amp;&amp; card.adId) {
+                        // 检查广告状态，判断是否需要删除
+                        // 只有明确是 inactive 状态不删除，其他所有状态（active、review、pending等）都删除
+                        def status = card.status ? card.status.toString().toLowerCase().trim() : ""
+                        def adStatus = card.adStatus ? card.adStatus.toString().toLowerCase().trim() : ""
+                        def state = card.state ? card.state.toString().toLowerCase().trim() : ""
                         def isActive = (card.isActive != null ? card.isActive : false)
-                        if (isActive) {
-                            activeIds.add(card.adId.toString())
-                            log.info("  ✅ 活跃广告: ${card.adId} - ${card.title ?: ''}")
-                        } else {
+                        
+                        // 判断是否为 inactive 状态（只有明确标记为 inactive 才跳过）
+                        // 检查多个可能的字段：status、adStatus、state
+                        def isInactive = (status == "inactive" || status.contains("inactive")) ||
+                                        (adStatus == "inactive" || adStatus.contains("inactive")) ||
+                                        (state == "inactive" || state.contains("inactive"))
+                        
+                        if (isInactive) {
                             inactiveIds.add(card.adId.toString())
-                            log.info("  💤 非活跃广告: ${card.adId} - ${card.title ?: ''}")
+                            def statusInfo = status ?: (adStatus ?: (state ?: "unknown"))
+                            log.info("  💤 非活跃广告（跳过）: ${card.adId} - ${card.title ?: ''} [状态: ${statusInfo}]")
+                        } else {
+                            toDeleteIds.add(card.adId.toString())
+                            def statusInfo = status ?: (adStatus ?: (state ?: (isActive ? "active" : "review/pending")))
+                            log.info("  ✅ 待删除广告: ${card.adId} - ${card.title ?: ''} [状态: ${statusInfo}]")
                         }
                     }
                 }
@@ -329,19 +343,19 @@ try {
         }
     }
     
-    // 用于删除循环（仅活跃）
-    vars.put("adIdCount", activeIds.size().toString())
-    vars.put("adIdList", activeIds.join(","))
+    // 用于删除循环（除了inactive外的所有广告）
+    vars.put("adIdCount", toDeleteIds.size().toString())
+    vars.put("adIdList", toDeleteIds.join(","))
     // 记录非活跃列表（仅日志/统计用）
     vars.put("inactiveAdIdList", inactiveIds.join(","))
 
-    // 账号级统计
-    vars.put("account_total_active_ads", activeIds.size().toString())
+    // 账号级统计（保持兼容性，活跃=待删除，非活跃=跳过）
+    vars.put("account_total_active_ads", toDeleteIds.size().toString())
     vars.put("account_total_inactive_ads", inactiveIds.size().toString())
-    vars.put("account_total_ads", (activeIds.size() + inactiveIds.size()).toString())
+    vars.put("account_total_ads", (toDeleteIds.size() + inactiveIds.size()).toString())
 
     log.info("✅ 进入 MyGumtree 页面成功 (HTTP ${prev.getResponseCode()})")
-    log.info("📊 活跃广告: ${activeIds.size()} | 非活跃广告: ${inactiveIds.size()} | 总计: ${activeIds.size() + inactiveIds.size()}")
+    log.info("📊 待删除广告: ${toDeleteIds.size()} | 跳过（非活跃）: ${inactiveIds.size()} | 总计: ${toDeleteIds.size() + inactiveIds.size()}")
     
 } catch (Exception e) {
     log.error("❌ 提取广告ID异常: " + e.message)
