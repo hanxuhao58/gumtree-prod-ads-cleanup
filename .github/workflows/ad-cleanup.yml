@@ -37,6 +37,7 @@ env:
 jobs:
   cleanup-ads:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     
     steps:
       - name: 检出代码
@@ -116,6 +117,7 @@ jobs:
 
       - name: 运行广告清理脚本
         id: run_cleanup
+        timeout-minutes: 150
         run: |
           cd scripts
           # 使用手动输入的环境或默认使用 prod

@@ -251,7 +251,10 @@ run_jmeter() {
     echo ""
     
     # 运行JMeter（非GUI模式）
+    # 设置JMeter系统属性：连接超时30秒，响应超时60秒
     jmeter -n \
+        -Jsun.net.client.defaultConnectTimeout=30000 \
+        -Jsun.net.client.defaultReadTimeout=60000 \
         -t "$TEST_PLAN" \
         -q "$CONFIG_FILE" \
         -l "${REPORTS_DIR}/multi_cleanup_${TIMESTAMP}.jtl" \

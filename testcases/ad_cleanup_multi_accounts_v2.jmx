@@ -171,6 +171,8 @@ SampleResult.setResponseMessage("账号初始化完成")
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
               <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <stringProp name="HTTPSampler.connect_timeout">30000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">60000</stringProp>
               <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="userName" elementType="HTTPArgument">
@@ -285,6 +287,8 @@ try {
                 <stringProp name="HTTPSampler.method">GET</stringProp>
                 <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
                 <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+                <stringProp name="HTTPSampler.connect_timeout">30000</stringProp>
+                <stringProp name="HTTPSampler.response_timeout">60000</stringProp>
                 <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
                   <collectionProp name="Arguments.arguments"/>
                 </elementProp>
@@ -430,6 +434,8 @@ if (adIdList &amp;&amp; !adIdList.isEmpty()) {
                   <stringProp name="HTTPSampler.method">DELETE</stringProp>
                   <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
                   <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+                  <stringProp name="HTTPSampler.connect_timeout">30000</stringProp>
+                  <stringProp name="HTTPSampler.response_timeout">60000</stringProp>
                   <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
                     <collectionProp name="Arguments.arguments"/>
                   </elementProp>
