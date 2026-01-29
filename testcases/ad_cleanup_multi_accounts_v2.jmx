@@ -347,20 +347,35 @@ try {
                         processedAdIds.add(adIdStr)
                         
                         // 检查广告状态，判断是否需要删除
-                        // ⚠️ 重要：删除 active、review、pending 等状态的广告（确保线上没有数据污染）
-                        // 只保留 inactive 状态的广告（已下线的广告）
+                        // ⚠️ 重要：只删除 active、review、pending 等状态的广告
+                        // 排除：inactive（已下线）、deleted（已删除）等状态
                         def status = card.status ? card.status.toString().toLowerCase().trim() : ""
                         def adStatus = card.adStatus ? card.adStatus.toString().toLowerCase().trim() : ""
                         def state = card.state ? card.state.toString().toLowerCase().trim() : ""
+                        def label = card.label ? (card.label instanceof Map ? card.label.toString().toLowerCase() : card.label.toString().toLowerCase().trim()) : ""
                         def isActive = (card.isActive != null ? card.isActive : false)
                         
-                        // 判断是否为 inactive 状态（只有明确标记为 inactive 才保留，不删除）
-                        // 检查多个可能的字段：status、adStatus、state
+                        // 检查是否为已删除/已移除状态（排除这些广告）
+                        // 处理各种可能的格式：字符串、Map、对象等
+                        def statusStr = "${status}|${adStatus}|${state}|${label}".toLowerCase()
+                        def isDeleted = statusStr.contains("deleted") || 
+                                       statusStr.contains("removed") ||
+                                       statusStr.contains("label=deleted") ||
+                                       statusStr.contains("label=removed") ||
+                                       (label &amp;&amp; (label.contains("deleted") || label.contains("removed") || 
+                                        label.contains("label=deleted") || label.contains("label=removed")))
+                        
+                        // 判断是否为 inactive 状态（已下线，保留不删除）
                         def isInactive = (status == "inactive" || status.contains("inactive")) ||
                                         (adStatus == "inactive" || adStatus.contains("inactive")) ||
                                         (state == "inactive" || state.contains("inactive"))
                         
-                        if (isInactive) {
+                        if (isDeleted) {
+                            // 已删除/已移除状态 → 跳过（不统计，不删除）
+                            def statusInfo = label ?: (status ?: (adStatus ?: (state ?: "deleted/removed")))
+                            log.info("  ⏭️  跳过已删除/已移除广告: ${adIdStr} - ${card.title ?: ''} [状态: ${statusInfo}]")
+                            return  // 跳过这个广告，不加入任何列表
+                        } else if (isInactive) {
                             // inactive 状态 → 保留（不删除）
                             inactiveIdsSet.add(adIdStr)
                             def statusInfo = status ?: (adStatus ?: (state ?: "unknown"))
@@ -368,7 +383,7 @@ try {
                         } else {
                             // active、review、pending 等其他状态 → 删除（清理测试数据）
                             toDeleteIdsSet.add(adIdStr)
-                            def statusInfo = status ?: (adStatus ?: (state ?: (isActive ? "active" : "review/pending")))
+                            def statusInfo = label ?: (status ?: (adStatus ?: (state ?: (isActive ? "active" : "review/pending"))))
                             log.info("  🗑️  待删除广告: ${adIdStr} - ${card.title ?: ''} [状态: ${statusInfo}]")
                         }
                     }

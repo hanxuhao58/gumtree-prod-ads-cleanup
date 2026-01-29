@@ -299,11 +299,11 @@ show_summary() {
         echo ""
         echo -e "${CYAN}📈 总体统计${NC}"
         
-        # 统计总数
-        TOTAL_ADS=$(grep -o "发现活跃广告: [0-9]\+" "$LOG_FILE" | awk '{sum += $NF} END {print sum}')
-        TOTAL_DELETED=$(grep -o "成功删除: [0-9]\+" "$LOG_FILE" | awk '{sum += $NF} END {print sum}')
+        # 统计总数 - 使用正确的日志格式
+        TOTAL_ADS=$(grep -o "待删除广告（active/review/pending等）: [0-9]\+" "$LOG_FILE" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
+        TOTAL_DELETED=$(grep -o "成功删除: [0-9]\+" "$LOG_FILE" | grep -o "[0-9]\+" | awk '{sum += $1} END {print sum+0}')
         
-        echo "  总共发现: ${TOTAL_ADS:-0} 个活跃广告"
+        echo "  总共发现待删除: ${TOTAL_ADS:-0} 个广告"
         echo "  成功删除: ${TOTAL_DELETED:-0} 个广告"
         
     fi
