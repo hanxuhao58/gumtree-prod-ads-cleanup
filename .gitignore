@@ -7,9 +7,6 @@ jmeter.log
 data/auth_tokens.csv
 data/ad_ids.csv
 
-# 账号文件（敏感信息，建议本地保存）
-data/accounts.csv
-
 # 文档文件（本地保存，不上传）
 *.md
 
