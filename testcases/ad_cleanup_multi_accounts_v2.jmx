@@ -89,14 +89,30 @@ SampleResult.setResponseMessage("找到 ${accountCount} 个账号")
 String u = vars.get('username')
 String en = (vars.get('enabled') ?: '').toString().toUpperCase()
 vars.put('enabled_upper', en)
-if (u) {
-    log.info("🔎 本次迭代账号: ${vars.get('team_member')} &lt;${u}&gt; | enabled=${en}")
+
+// 检查CSV是否读取完毕（username为空表示CSV已读完）
+if (!u || u.trim().isEmpty()) {
+    log.info("📋 CSV文件读取完毕，所有账号已处理完成")
+    vars.put('csv_finished', 'true')
+    // 设置一个标志让后续步骤跳过
+    SampleResult.setSuccessful(true)
+    SampleResult.setResponseMessage('CSV读取完毕')
+    return
 }
+
+vars.put('csv_finished', 'false')
+log.info("🔎 本次迭代账号: ${vars.get('team_member')} &lt;${u}&gt; | enabled=${en}")
 SampleResult.setSuccessful(true)
 SampleResult.setResponseMessage('ok')
 </stringProp>
         </JSR223Sampler>
         <hashTree/>
+        
+        <!-- 如果CSV读取完毕，跳过后续处理 -->
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="检查CSV是否读取完毕">
+          <stringProp name="IfController.condition">${__groovy(vars.get('csv_finished') != 'true')}</stringProp>
+        </IfController>
+        <hashTree>
         
         <!-- 只处理enabled=TRUE的账号 -->
         <IfController guiclass="IfControllerPanel" testclass="IfController" testname="只处理启用的账号">
@@ -498,6 +514,8 @@ SampleResult.setResponseMessage("完成")
           </ConstantTimer>
           <hashTree/>
           
+        </hashTree>
+        
         </hashTree>
         
       </hashTree>
