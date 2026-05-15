@@ -1,0 +1,35 @@
+name: 仓库保活
+
+on:
+  # 每 50 天运行一次，避免 GitHub 因 60 天无活动禁用定时任务
+  schedule:
+    - cron: '0 0 1 */2 *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 更新活动记录
+        run: |
+          echo "最后活动时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')" > .last-activity
+          echo "触发方式: ${{ github.event_name }}" >> .last-activity
+          echo "运行编号: #${{ github.run_number }}" >> .last-activity
+
+      - name: 提交变更
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last-activity
+          if git diff --cached --quiet; then
+            echo "无变更，跳过提交"
+          else
+            git commit -m "chore: 仓库保活 - $(TZ='Asia/Shanghai' date '+%Y-%m-%d')"
+            git push
+          fi
